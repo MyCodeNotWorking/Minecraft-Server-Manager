@@ -3,7 +3,11 @@
     <ServerName v-model="server.name"></ServerName>
     <ServerInfo :server="server"></ServerInfo>
     <StartServer :server="server"></StartServer>
-    <Logs :initial-logs="serverLogs" :server-name="server.name"></Logs>
+    <Logs 
+      :initial-logs="serverLogs"
+      :initial-bore-logs="boreLogs"
+      :server-name="server.name"
+    ></Logs>
   </div>
 </template>
 
@@ -29,6 +33,7 @@ const server = reactive({
 })
 
 const serverLogs = ref("")
+const boreLogs = ref("")
 
 // Listen for the back-end to confirm the Java process has closed
 const handleServerStopped = (event, stoppedServerName) => {
@@ -46,6 +51,7 @@ onMounted(async () => {
     const status = await window.ipcRenderer.getServerStatus(server.name);
     server.running = status.isRunning;
     serverLogs.value = status.logs; // Load historical logs
+    boreLogs.value = status.boreLogs;
   } catch (e) {
     console.error("Failed to sync server status:", e);
   }

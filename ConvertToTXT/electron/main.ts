@@ -221,10 +221,23 @@ ipcMain.handle('servers:create', async (_, serverData) => {
 const activeServers = new Map<string, ReturnType<typeof spawn>>();
 const serverLogs = new Map<string, string>();
 
+const activeBoreProcesses = new Map<string, ReturnType<typeof spawn>>();
+const boreLogs = new Map<string, string>();
+
 ipcMain.handle('start-server', async (event, serverData) => {
   const serverDir = path.join(SERVERS_DIR, serverData.name);
   const eulaPath = path.join(serverDir, 'eula.txt');
   const jarPath = path.join(serverDir, 'server.jar'); // Assuming you download it here
+  const borePath = getBorePath();
+
+  console.log("Starting Bore from:", borePath);
+  // Check if file exists (optional safety check)
+  if (!fs.existsSync(borePath)) {
+     const errorMsg = `[ERROR] Bore binary not found at: ${borePath}\n`;
+     // Send error to logs if you wish
+     win?.webContents.send('bore-log', { name: serverData.name, text: errorMsg });
+     return false; // Or continue without bore
+  }
 
   // 1. Auto-accept the EULA
   fs.writeFileSync(eulaPath, 'eula=true\n');
@@ -241,6 +254,10 @@ ipcMain.handle('start-server', async (event, serverData) => {
   // 3. Initialize Log Buffer for this server
   if (!serverLogs.has(serverData.name)) {
     serverLogs.set(serverData.name, "");
+  }
+
+  if (!boreLogs.has(serverData.name)) {
+    boreLogs.set(serverData.name, "");
   }
 
   // 4. Spawn the Java process
@@ -287,12 +304,48 @@ ipcMain.handle('start-server', async (event, serverData) => {
     win?.webContents.send('server-stopped', serverData.name);
   });
 
+  // 4. Spawn the Bore process
+  // Warning: This hardcodes port 25565. If you run multiple servers, 
+  // ensure they don't conflict or read the port from server.properties.
+  // Spawn using the absolute path
+  const boreProcess = spawn(borePath, ['local', '25565', '--to', 'bore.pub']);
+  activeBoreProcesses.set(serverData.name, boreProcess);
+
+  const handleBoreLog = (data: Buffer | string) => {
+    const text = data.toString();
+    
+    // Append to backend memory
+    const currentBoreLogs = boreLogs.get(serverData.name) || "";
+    boreLogs.set(serverData.name, currentBoreLogs + text);
+
+    // Send to frontend
+    win?.webContents.send('bore-log', { 
+      name: serverData.name, 
+      text: text 
+    });
+  };
+
+  boreProcess.stdout.on('data', handleBoreLog);
+  boreProcess.stderr.on('data', handleBoreLog);
+  
+  boreProcess.on('close', (code) => {
+    activeBoreProcesses.delete(serverData.name);
+    const exitMsg = `[SYSTEM] Bore tunnel stopped with code ${code}\n`;
+    handleBoreLog(exitMsg);
+  });
+
   return true;
 });
 
 // Add this IPC Handler to stop the server
 ipcMain.handle('stop-server', async (event, serverName) => {
   const serverProcess = activeServers.get(serverName);
+
+  const boreProcess = activeBoreProcesses.get(serverName);
+  if (boreProcess) {
+    boreProcess.kill(); // Kill bore immediately, it doesn't need graceful stop
+    activeBoreProcesses.delete(serverName);
+  }
 
   if (serverProcess) {
     // 1. Send the "stop" command to the Minecraft server console
@@ -311,7 +364,8 @@ ipcMain.handle('stop-server', async (event, serverName) => {
 ipcMain.handle('server:get-status', (_, serverName: string) => {
   return {
     isRunning: activeServers.has(serverName),
-    logs: serverLogs.get(serverName) || ""
+    logs: serverLogs.get(serverName) || "",
+    boreLogs: boreLogs.get(serverName) || ""
   };
 });
 
@@ -397,3 +451,23 @@ ipcMain.handle('world:regenerate', async (_, serverName: string) => {
     throw error;
   }
 });
+
+function getBorePath(): string {
+  const platform = process.platform;
+  let binName = 'bore';
+  
+  // Append .exe for Windows
+  if (platform === 'win32') {
+    binName = 'bore.exe';
+  }
+
+  if (app.isPackaged) {
+    // PRODUCTION: The binary is inside the app's resources folder
+    // path: /resources/bin/bore.exe
+    return path.join(process.resourcesPath, 'bin', binName);
+  } else {
+    // DEVELOPMENT: The binary is in your project root resources
+    // path: /project-root/resources/bin/bore.exe
+    return path.join(process.env.APP_ROOT, 'resources', 'bin', binName);
+  }
+}

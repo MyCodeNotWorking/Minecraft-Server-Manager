@@ -34,7 +34,7 @@
 </template>
 
 <script setup>
-import { ref, toRefs } from 'vue'
+import { ref, toRefs, watch } from 'vue'
 
 const props = defineProps({
   server: {
@@ -45,6 +45,12 @@ const props = defineProps({
 
 const { server } = toRefs(props)
 const isStopping = ref(false)
+
+watch(() => server.value.running, (isRunning) => {
+  if (!isRunning) {
+    isStopping.value = false;
+  }
+});
 
 const toggleServer = async () => {
   if (!server.value.running) {
