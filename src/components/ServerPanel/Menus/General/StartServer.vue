@@ -1,5 +1,14 @@
 <template>
-  <div class="my-10 flex flex-col gap-3 bg-gray-800 rounded-lg p-5 text-white">
+  <div class="my-10 flex flex-col gap-3 bg-gray-800 rounded-lg p-5 text-white border">
+    <label class="font-semibold text-green-200">Server Port
+      <span class="text-gray-500 text-sm font-light"><br>Keep in mind that multiple servers running simultaneously cannot use the same port!</span>
+    </label>
+    <input
+      type="number"
+      v-model.number="server.port"
+      class="px-3 py-2 bg-gray-700 rounded border border-gray-600 focus:outline-none focus:ring-2 focus:ring-green-400"
+    />
+
     <label class="font-semibold">Minimum RAM (MB)</label>
     <input
       type="number"
@@ -56,6 +65,7 @@ const toggleServer = async () => {
   if (!server.value.running) {
     const success = await window.ipcRenderer.startServer({
       name: server.value.name,
+      port: server.value.port,
       minRam: server.value.minRam,
       maxRam: server.value.maxRam
     });

@@ -29,6 +29,7 @@ const server = reactive({
   running: false,
   minRam: 1024,
   maxRam: 2048,
+  port: 25565,
   createdAt: route.query.createdAt
 })
 

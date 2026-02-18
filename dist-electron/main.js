@@ -162,8 +162,22 @@ ipcMain.handle("start-server", async (event, serverData) => {
   if (!boreLogs.has(serverData.name)) {
     boreLogs.set(serverData.name, "");
   }
+  const port = serverData.port || 25565;
   const minRam = serverData.minRam || 1024;
   const maxRam = serverData.maxRam || 2048;
+  const serverPropertiesPath = path.join(serverDir, "server.properties");
+  let properties = "";
+  if (fs.existsSync(serverPropertiesPath)) {
+    properties = fs.readFileSync(serverPropertiesPath, "utf-8");
+  }
+  if (properties.includes("server-port=")) {
+    properties = properties.replace(/server-port=\d+/g, `server-port=${port}`);
+  } else {
+    properties += `
+server-port=${port}
+`;
+  }
+  fs.writeFileSync(serverPropertiesPath, properties);
   const serverProcess = spawn("java", [
     `-Xms${minRam}M`,
     `-Xmx${maxRam}M`,
@@ -190,7 +204,7 @@ ipcMain.handle("start-server", async (event, serverData) => {
     handleLog(exitMsg);
     win == null ? void 0 : win.webContents.send("server-stopped", serverData.name);
   });
-  const boreProcess = spawn(borePath, ["local", "25565", "--to", "bore.pub"]);
+  const boreProcess = spawn(borePath, ["local", port.toString(), "--to", "bore.pub"]);
   activeBoreProcesses.set(serverData.name, boreProcess);
   const handleBoreLog = (data) => {
     const text = data.toString();

@@ -262,8 +262,25 @@ ipcMain.handle('start-server', async (event, serverData) => {
 
   // 4. Spawn the Java process
   // Adjust memory arguments based on the UI inputs
+  const port = serverData.port || 25565;
   const minRam = serverData.minRam || 1024;
   const maxRam = serverData.maxRam || 2048;
+
+  const serverPropertiesPath = path.join(serverDir, 'server.properties');
+
+  let properties = '';
+  if (fs.existsSync(serverPropertiesPath)) {
+    properties = fs.readFileSync(serverPropertiesPath, 'utf-8');
+  }
+
+  // Replace or add port
+  if (properties.includes('server-port=')) {
+    properties = properties.replace(/server-port=\d+/g, `server-port=${port}`);
+  } else {
+    properties += `\nserver-port=${port}\n`;
+  }
+
+  fs.writeFileSync(serverPropertiesPath, properties);
   
   const serverProcess = spawn('java', [
     `-Xms${minRam}M`,
@@ -308,7 +325,7 @@ ipcMain.handle('start-server', async (event, serverData) => {
   // Warning: This hardcodes port 25565. If you run multiple servers, 
   // ensure they don't conflict or read the port from server.properties.
   // Spawn using the absolute path
-  const boreProcess = spawn(borePath, ['local', '25565', '--to', 'bore.pub']);
+  const boreProcess = spawn(borePath, ['local', port.toString(), '--to', 'bore.pub']);
   activeBoreProcesses.set(serverData.name, boreProcess);
 
   const handleBoreLog = (data: Buffer | string) => {
