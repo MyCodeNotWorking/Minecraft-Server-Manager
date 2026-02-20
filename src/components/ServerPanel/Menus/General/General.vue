@@ -30,7 +30,8 @@ const server = reactive({
   minRam: 1024,
   maxRam: 2048,
   port: 25565,
-  createdAt: route.query.createdAt
+  createdAt: route.query.createdAt,
+  boreIp: ""
 })
 
 const serverLogs = ref("")
@@ -40,12 +41,21 @@ const boreLogs = ref("")
 const handleServerStopped = (event, stoppedServerName) => {
   if (server.name === stoppedServerName) {
     server.running = false
+    server.boreIp = ""
+  }
+}
+
+// Listen for dynamic IP extraction
+const handleBoreIp = (event, payload) => {
+  if (server.name === payload.name) {
+    server.boreIp = payload.ip
   }
 }
 
 onMounted(async () => {
   // 1. Listen for stop events
   window.ipcRenderer.on('server-stopped', handleServerStopped)
+  window.ipcRenderer.on('bore-ip', handleBoreIp)
 
   // 2. Fetch REAL status from backend (Syncs UI with Background Process)
   try {
@@ -53,6 +63,11 @@ onMounted(async () => {
     server.running = status.isRunning;
     serverLogs.value = status.logs; // Load historical logs
     boreLogs.value = status.boreLogs;
+    // Sync RAM, Port, and IP states from backend memory
+    server.minRam = status.minRam;
+    server.maxRam = status.maxRam;
+    server.port = status.port;
+    server.boreIp = status.boreIp;
   } catch (e) {
     console.error("Failed to sync server status:", e);
   }
@@ -60,5 +75,6 @@ onMounted(async () => {
 
 onUnmounted(() => {
   window.ipcRenderer.off('server-stopped', handleServerStopped)
+  window.ipcRenderer.off('bore-ip', handleBoreIp)
 })
 </script>

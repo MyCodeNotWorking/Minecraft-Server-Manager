@@ -223,6 +223,7 @@ const serverLogs = new Map<string, string>();
 
 const activeBoreProcesses = new Map<string, ReturnType<typeof spawn>>();
 const boreLogs = new Map<string, string>();
+const activeBoreIps = new Map<string, string>();
 
 ipcMain.handle('start-server', async (event, serverData) => {
   const serverDir = path.join(SERVERS_DIR, serverData.name);
@@ -262,8 +263,25 @@ ipcMain.handle('start-server', async (event, serverData) => {
 
   // 4. Spawn the Java process
   // Adjust memory arguments based on the UI inputs
+  const port = serverData.port || 25565;
   const minRam = serverData.minRam || 1024;
   const maxRam = serverData.maxRam || 2048;
+
+  const serverPropertiesPath = path.join(serverDir, 'server.properties');
+
+  let properties = '';
+  if (fs.existsSync(serverPropertiesPath)) {
+    properties = fs.readFileSync(serverPropertiesPath, 'utf-8');
+  }
+
+  // Replace or add port
+  if (properties.includes('server-port=')) {
+    properties = properties.replace(/server-port=\d+/g, `server-port=${port}`);
+  } else {
+    properties += `\nserver-port=${port}\n`;
+  }
+
+  fs.writeFileSync(serverPropertiesPath, properties);
   
   const serverProcess = spawn('java', [
     `-Xms${minRam}M`,
@@ -308,11 +326,18 @@ ipcMain.handle('start-server', async (event, serverData) => {
   // Warning: This hardcodes port 25565. If you run multiple servers, 
   // ensure they don't conflict or read the port from server.properties.
   // Spawn using the absolute path
-  const boreProcess = spawn(borePath, ['local', '25565', '--to', 'bore.pub']);
+  const boreProcess = spawn(borePath, ['local', port.toString(), '--to', 'bore.pub']);
   activeBoreProcesses.set(serverData.name, boreProcess);
 
   const handleBoreLog = (data: Buffer | string) => {
     const text = data.toString();
+
+    // Look for the Bore IP in the logs and send it to the frontend
+    const match = text.match(/bore\.pub:\d+/);
+    if (match) {
+      activeBoreIps.set(serverData.name, match[0]);
+      win?.webContents.send('bore-ip', { name: serverData.name, ip: match[0] });
+    }
     
     // Append to backend memory
     const currentBoreLogs = boreLogs.get(serverData.name) || "";
@@ -330,6 +355,7 @@ ipcMain.handle('start-server', async (event, serverData) => {
   
   boreProcess.on('close', (code) => {
     activeBoreProcesses.delete(serverData.name);
+    activeBoreIps.delete(serverData.name);
     const exitMsg = `[SYSTEM] Bore tunnel stopped with code ${code}\n`;
     handleBoreLog(exitMsg);
   });
@@ -345,6 +371,7 @@ ipcMain.handle('stop-server', async (event, serverName) => {
   if (boreProcess) {
     boreProcess.kill(); // Kill bore immediately, it doesn't need graceful stop
     activeBoreProcesses.delete(serverName);
+    activeBoreIps.delete(serverName);
   }
 
   if (serverProcess) {
@@ -362,10 +389,18 @@ ipcMain.handle('stop-server', async (event, serverName) => {
 });
 
 ipcMain.handle('server:get-status', (_, serverName: string) => {
+  const servers = getSavedServers();
+  const serverInfo = servers.find((s: any) => s.name === serverName) || {};
+
   return {
     isRunning: activeServers.has(serverName),
     logs: serverLogs.get(serverName) || "",
-    boreLogs: boreLogs.get(serverName) || ""
+    boreLogs: boreLogs.get(serverName) || "",
+    // Pass back saved settings, defaulting if they don't exist yet
+    minRam: serverInfo.minRam || 1024,
+    maxRam: serverInfo.maxRam || 2048,
+    port: serverInfo.port || 25565,
+    boreIp: activeBoreIps.get(serverName) || ""
   };
 });
 
@@ -400,7 +435,7 @@ ipcMain.handle('servers:update', async (_, oldName: string, updatedData: any) =>
 
     if (index !== -1) {
       // 1. Rename the server's directory if the name changed
-      if (oldName !== updatedData.name) {
+      if (updatedData.name && oldName !== updatedData.name) {
         const oldPath = path.join(SERVERS_DIR, oldName);
         const newPath = path.join(SERVERS_DIR, updatedData.name);
         if (fs.existsSync(oldPath)) {

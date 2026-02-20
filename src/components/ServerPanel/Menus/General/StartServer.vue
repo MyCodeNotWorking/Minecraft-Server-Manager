@@ -39,6 +39,22 @@
     >
       {{ server.running ? (isStopping ? 'Stopping...' : 'Stop Server') : 'Start Server' }}
     </button>
+
+    <div class="mt-2 flex flex-col gap-2">
+      <p v-if="server.running">
+        Your server is running with <span class="font-semibold">{{ server.minRam }}–{{ server.maxRam }} MB RAM</span> on port <span class="font-semibold">{{ server.port }}</span>.
+      </p>
+
+      <p v-if="server.running">
+        Your server is publicly accessible at 
+        <span v-if="server.boreIp" class="inline-block px-3 py-1 bg-gray-500 text-white font-bold rounded-lg shadow-md">
+          {{ server.boreIp }}
+        </span>
+        <span v-else class="inline-block px-3 py-1 bg-gray-500 text-gray-300 font-bold rounded-lg shadow-md italic">
+          Connecting...
+        </span>
+      </p>
+    </div>
   </div>
 </template>
 
@@ -63,6 +79,15 @@ watch(() => server.value.running, (isRunning) => {
 
 const toggleServer = async () => {
   if (!server.value.running) {
+    // 1. Persist RAM and port configurations to servers.json before starting
+    await window.ipcRenderer.updateServer(server.value.name, {
+      name: server.value.name,
+      port: server.value.port,
+      minRam: server.value.minRam,
+      maxRam: server.value.maxRam
+    });
+
+    // 2. Start the server
     const success = await window.ipcRenderer.startServer({
       name: server.value.name,
       port: server.value.port,

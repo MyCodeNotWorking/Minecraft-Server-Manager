@@ -223,6 +223,7 @@ const serverLogs = new Map<string, string>();
 
 const activeBoreProcesses = new Map<string, ReturnType<typeof spawn>>();
 const boreLogs = new Map<string, string>();
+const activeBoreIps = new Map<string, string>();
 
 ipcMain.handle('start-server', async (event, serverData) => {
   const serverDir = path.join(SERVERS_DIR, serverData.name);
@@ -330,6 +331,13 @@ ipcMain.handle('start-server', async (event, serverData) => {
 
   const handleBoreLog = (data: Buffer | string) => {
     const text = data.toString();
+
+    // Look for the Bore IP in the logs and send it to the frontend
+    const match = text.match(/bore\.pub:\d+/);
+    if (match) {
+      activeBoreIps.set(serverData.name, match[0]);
+      win?.webContents.send('bore-ip', { name: serverData.name, ip: match[0] });
+    }
     
     // Append to backend memory
     const currentBoreLogs = boreLogs.get(serverData.name) || "";
@@ -347,6 +355,7 @@ ipcMain.handle('start-server', async (event, serverData) => {
   
   boreProcess.on('close', (code) => {
     activeBoreProcesses.delete(serverData.name);
+    activeBoreIps.delete(serverData.name);
     const exitMsg = `[SYSTEM] Bore tunnel stopped with code ${code}\n`;
     handleBoreLog(exitMsg);
   });
@@ -362,6 +371,7 @@ ipcMain.handle('stop-server', async (event, serverName) => {
   if (boreProcess) {
     boreProcess.kill(); // Kill bore immediately, it doesn't need graceful stop
     activeBoreProcesses.delete(serverName);
+    activeBoreIps.delete(serverName);
   }
 
   if (serverProcess) {
@@ -379,10 +389,18 @@ ipcMain.handle('stop-server', async (event, serverName) => {
 });
 
 ipcMain.handle('server:get-status', (_, serverName: string) => {
+  const servers = getSavedServers();
+  const serverInfo = servers.find((s: any) => s.name === serverName) || {};
+
   return {
     isRunning: activeServers.has(serverName),
     logs: serverLogs.get(serverName) || "",
-    boreLogs: boreLogs.get(serverName) || ""
+    boreLogs: boreLogs.get(serverName) || "",
+    // Pass back saved settings, defaulting if they don't exist yet
+    minRam: serverInfo.minRam || 1024,
+    maxRam: serverInfo.maxRam || 2048,
+    port: serverInfo.port || 25565,
+    boreIp: activeBoreIps.get(serverName) || ""
   };
 });
 
@@ -417,7 +435,7 @@ ipcMain.handle('servers:update', async (_, oldName: string, updatedData: any) =>
 
     if (index !== -1) {
       // 1. Rename the server's directory if the name changed
-      if (oldName !== updatedData.name) {
+      if (updatedData.name && oldName !== updatedData.name) {
         const oldPath = path.join(SERVERS_DIR, oldName);
         const newPath = path.join(SERVERS_DIR, updatedData.name);
         if (fs.existsSync(oldPath)) {

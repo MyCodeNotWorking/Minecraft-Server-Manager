@@ -135,6 +135,7 @@ const activeServers = /* @__PURE__ */ new Map();
 const serverLogs = /* @__PURE__ */ new Map();
 const activeBoreProcesses = /* @__PURE__ */ new Map();
 const boreLogs = /* @__PURE__ */ new Map();
+const activeBoreIps = /* @__PURE__ */ new Map();
 ipcMain.handle("start-server", async (event, serverData) => {
   const serverDir = path.join(SERVERS_DIR, serverData.name);
   const eulaPath = path.join(serverDir, "eula.txt");
@@ -208,6 +209,11 @@ server-port=${port}
   activeBoreProcesses.set(serverData.name, boreProcess);
   const handleBoreLog = (data) => {
     const text = data.toString();
+    const match = text.match(/bore\.pub:\d+/);
+    if (match) {
+      activeBoreIps.set(serverData.name, match[0]);
+      win == null ? void 0 : win.webContents.send("bore-ip", { name: serverData.name, ip: match[0] });
+    }
     const currentBoreLogs = boreLogs.get(serverData.name) || "";
     boreLogs.set(serverData.name, currentBoreLogs + text);
     win == null ? void 0 : win.webContents.send("bore-log", {
@@ -219,6 +225,7 @@ server-port=${port}
   boreProcess.stderr.on("data", handleBoreLog);
   boreProcess.on("close", (code) => {
     activeBoreProcesses.delete(serverData.name);
+    activeBoreIps.delete(serverData.name);
     const exitMsg = `[SYSTEM] Bore tunnel stopped with code ${code}
 `;
     handleBoreLog(exitMsg);
@@ -232,6 +239,7 @@ ipcMain.handle("stop-server", async (event, serverName) => {
   if (boreProcess) {
     boreProcess.kill();
     activeBoreProcesses.delete(serverName);
+    activeBoreIps.delete(serverName);
   }
   if (serverProcess) {
     (_a = serverProcess.stdin) == null ? void 0 : _a.write("stop\n");
@@ -240,10 +248,17 @@ ipcMain.handle("stop-server", async (event, serverName) => {
   return false;
 });
 ipcMain.handle("server:get-status", (_, serverName) => {
+  const servers = getSavedServers();
+  const serverInfo = servers.find((s) => s.name === serverName) || {};
   return {
     isRunning: activeServers.has(serverName),
     logs: serverLogs.get(serverName) || "",
-    boreLogs: boreLogs.get(serverName) || ""
+    boreLogs: boreLogs.get(serverName) || "",
+    // Pass back saved settings, defaulting if they don't exist yet
+    minRam: serverInfo.minRam || 1024,
+    maxRam: serverInfo.maxRam || 2048,
+    port: serverInfo.port || 25565,
+    boreIp: activeBoreIps.get(serverName) || ""
   };
 });
 ipcMain.handle("servers:delete", async (_, serverName) => {
@@ -266,7 +281,7 @@ ipcMain.handle("servers:update", async (_, oldName, updatedData) => {
     const servers = getSavedServers();
     const index = servers.findIndex((s) => s.name === oldName);
     if (index !== -1) {
-      if (oldName !== updatedData.name) {
+      if (updatedData.name && oldName !== updatedData.name) {
         const oldPath = path.join(SERVERS_DIR, oldName);
         const newPath = path.join(SERVERS_DIR, updatedData.name);
         if (fs.existsSync(oldPath)) {
