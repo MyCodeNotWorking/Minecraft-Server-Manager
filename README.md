@@ -1,18 +1,62 @@
-# Vue 3 + TypeScript + Vite
+# Minecraft Server Manager
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+An Electron-based desktop application to manage and host Minecraft servers with integrated tunneling.
 
-## Recommended IDE Setup
+## Features
 
-- [VS Code](https://code.visualstudio.com/) + [Volar](https://marketplace.visualstudio.com/items?itemName=Vue.volar) (and disable Vetur) + [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin).
+* **Version Management**: Fetches and downloads Minecraft Vanilla (Mojang) and Forge versions.
+* **Instance Support**: Create and store multiple server configurations.
+* **Integrated Tunneling**: Built-in support for Bore to expose servers to the internet without port forwarding.
+* **Console Streaming**: Real-time server and tunnel logs visible within the app.
+* **Resource Allocation**: Adjustable RAM (Xmx/Xms) and port settings per instance.
+* **File Management**: Quick access to server directories and world regeneration.
 
-## Type Support For `.vue` Imports in TS
+## Tech Stack
 
-TypeScript cannot handle type information for `.vue` imports by default, so we replace the `tsc` CLI with `vue-tsc` for type checking. In editors, we need [TypeScript Vue Plugin (Volar)](https://marketplace.visualstudio.com/items?itemName=Vue.vscode-typescript-vue-plugin) to make the TypeScript language service aware of `.vue` types.
+* **Framework**: Electron, Vue 3 (Vite).
+* **Styling**: Tailwind CSS.
+* **Backend**: Node.js (Child Process, File System).
+* **Tunneling**: Bore.
 
-If the standalone TypeScript plugin doesn't feel fast enough to you, Volar has also implemented a [Take Over Mode](https://github.com/johnsoncodehk/volar/discussions/471#discussioncomment-1361669) that is more performant. You can enable it by the following steps:
+## Prerequisites
 
-1. Disable the built-in TypeScript Extension
-   1. Run `Extensions: Show Built-in Extensions` from VSCode's command palette
-   2. Find `TypeScript and JavaScript Language Features`, right click and select `Disable (Workspace)`
-2. Reload the VSCode window by running `Developer: Reload Window` from the command palette.
+* **Node.js**: Current LTS version.
+* **Java**: Required to run server JARs (version must match Minecraft requirements).
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone <repository-url>
+
+```
+
+
+2. Install dependencies:
+```bash
+npm install
+
+```
+
+## Development
+
+Run the application in development mode:
+
+```bash
+npm run dev
+
+```
+
+## Production
+
+Build the application for distribution:
+
+```bash
+npm run build
+
+```
+
+## Data Persistence
+
+* **Metadata**: Configuration and server lists are stored in `servers.json` within the app's user data directory.
+* **Files**: Server JARs and world data are stored in the `server_files` subdirectory.
